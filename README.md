@@ -23,7 +23,7 @@
 ### Configuration
 1.  Clonez le dépôt :
     ```bash
-    git clone https://github.com/Mister-Obat/Window-Manager.git
+    git clone https://github.com/Mister-Obat/Window-Manager-2.git
     cd Window-Manager
     ```
 
