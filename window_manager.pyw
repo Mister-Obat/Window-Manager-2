@@ -100,6 +100,13 @@ class WindowLayoutManagerUI:
             pass
 
     def is_startup_enabled(self):
+        # 1. Check VBS (Priority)
+        startup_folder = os.path.join(os.getenv('APPDATA'), r'Microsoft\Windows\Start Menu\Programs\Startup')
+        vbs_path = os.path.join(startup_folder, "WindowManager.vbs")
+        if os.path.exists(vbs_path):
+            return True
+
+        # 2. Check Legacy Registry
         try:
             key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_READ)
             winreg.QueryValueEx(key, "WindowManager")
@@ -325,23 +332,37 @@ class WindowLayoutManagerUI:
 
     def toggle_startup_direct(self):
         should_run = self.startup_var.get()
-        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
-        try:
-            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_ALL_ACCESS)
-            if not should_run:
-                try:
-                    winreg.DeleteValue(key, "WindowManager")
-                except WindowsError: pass
-            else:
+        startup_folder = os.path.join(os.getenv('APPDATA'), r'Microsoft\Windows\Start Menu\Programs\Startup')
+        vbs_path = os.path.join(startup_folder, "WindowManager.vbs")
+
+        if should_run:
+            try:
                 exe = sys.executable.replace("python.exe", "pythonw.exe")
                 script = os.path.abspath(__file__)
-                cmd = f'"{exe}" "{script}"'
-                winreg.SetValueEx(key, "WindowManager", 0, winreg.REG_SZ, cmd)
-            winreg.CloseKey(key)
-        except Exception as e:
-            messagebox.showerror("Erreur", f"Impossible de modifier le démarrage : {e}")
-            # Revert UI if failed
-            self.startup_var.set(not should_run)
+                working_dir = os.path.dirname(script)
+                
+                # Escape quotes for VBS string
+                cmd_vbs = f'"{exe}" "{script}"'.replace('"', '""')
+                
+                vbs_content = (
+                    'Set WshShell = CreateObject("WScript.Shell")\n'
+                    f'WshShell.CurrentDirectory = "{working_dir}"\n'
+                    f'WshShell.Run "{cmd_vbs}", 0, False\n'
+                )
+                
+                # Use utf-16 to handle special characters (e.g., 'Créations') correctly in VBS
+                with open(vbs_path, "w", encoding="utf-16") as f:
+                    f.write(vbs_content)
+            except Exception as e:
+                messagebox.showerror("Erreur", f"Impossible d'activer le démarrage : {e}")
+                self.startup_var.set(False) # Revert UI
+        else:
+            if os.path.exists(vbs_path):
+                try:
+                    os.remove(vbs_path)
+                except Exception as e:
+                    messagebox.showerror("Erreur", f"Impossible de désactiver le démarrage : {e}")
+                    self.startup_var.set(True) # Revert UI
 
 
     def open_scenario_options(self, index):
